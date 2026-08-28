@@ -8,3 +8,4 @@ chroma_db_test/
 notebooks/
 .claude/
 /NIST.CSWP.04162018.pdf
+CONTEXT_CHATBOT_RAG_v2.md

@@ -3,9 +3,7 @@
 Chatbot documentaire sur le NIST Cybersecurity Framework v1.1 : retrieval hybride
 (keyword + embedding), answer contract avec span de preuve, dispatch
 séquentiel/batch selon le type de question, résolution des renvois internes
-en deux passes. Voir `CONTEXT_CHATBOT_RAG_v2.md` pour le contexte complet et
-les notebooks `notebooks/01_*`, `02_*`, `03_*` pour la construction et la
-validation étape par étape de chaque brique.
+en deux passes.
 
 ## Structure du projet
 
@@ -22,7 +20,6 @@ Chatbot_RAG/
 │   └── schemas.py            # Schémas Pydantic (answer contract)
 ├── data/
 │   └── nist_csf.pdf          # Document source
-├── notebooks/                 # Validation étape par étape (chunking, ChromaDB, answer contract, orchestrateur)
 ├── requirements.txt
 ├── .streamlit/
 │   └── secrets.toml           # Template (voir plus bas) -- jamais commité avec de vraies clés
@@ -84,20 +81,42 @@ refait pas entre deux questions dans la même session serveur.
    y compris le modèle spaCy (via l'URL directe du wheel, pas besoin de
    `spacy download`).
 
+## Ce que le chatbot démontre
+
+- **Retrieval hybride** : signal keyword (TF-IDF sur lemmas + petit
+  dictionnaire expert pour le vocabulaire absent du corpus) combiné au
+  cosine sur l'embedding `BAAI/bge-base-en-v1.5`, fusionnés par Reciprocal
+  Rank Fusion pondéré (cosine prioritaire, keyword en signal correctif).
+- **Answer contract typé** (Pydantic) : chaque réponse inclut un span de
+  preuve exact (page + texte copié mot pour mot), et deux booléens
+  (`answer_found`, `complete_answer_found`) pour ne jamais inventer une
+  réponse absente du document.
+- **Dispatch séquentiel/batch** selon le type de question (factual/list/
+  comparison), avec un parser hybride : règles déterministes sur mots-clés,
+  LLM léger seulement en cas de signaux contradictoires.
+- **Résolution des renvois internes en deux passes** : quand une réponse
+  pointe vers d'autres sections du document (ex: une catégorie qui renvoie
+  vers ses sous-catégories), une passe supplémentaire les résout
+  automatiquement et complète la réponse.
+
 ## Limites connues du prototype
 
-Voir la section "Ce à mentionner à Kezhan avec le lien" de
-`CONTEXT_CHATBOT_RAG_v2.md`, et les conclusions des notebooks `01`, `02` et
-`03` pour le détail de chaque décision de conception et des écarts
-constatés par rapport au plan initial (changement de modèle LLM Groq,
-fusion retrieval par RRF pondéré plutôt que l'union simple décrite au
-départ, etc.).
-
-- Index ChromaDB en mémoire (`EphemeralClient`) : pas de persistance entre
-  redémarrages, pas de mise à jour incrémentale.
-- Parser de question basé sur des mots-clés + LLM léger sur conflit, pas un
-  parser complet de tous les types de questions.
-- Résolution des renvois internes déterministe uniquement pour les IDs de
-  subcategory du document (`XX.YY-N`) ; les références informatives
-  (CIS CSC, COBIT 5, ISA 62443, ISO/IEC, NIST SP) ne sont pas indexées et ne
-  peuvent donc pas être citées ni résolues.
+- **Modèle LLM** : le plan initial visait Llama 3.3 70B via Groq, retiré du
+  catalogue Groq entre-temps — remplacé par `openai/gpt-oss-120b` (le plus
+  grand modèle disponible sur Groq, choisi pour la même raison : suivre
+  fidèlement un schéma JSON structuré).
+- **Index ChromaDB en mémoire** (`EphemeralClient`) : pas de persistance
+  entre redémarrages, pas de mise à jour incrémentale. À vrai volume
+  (documents multiples, mises à jour fréquentes), il faudrait passer à une
+  base vectorielle persistante (Qdrant, pgvector, Chroma en mode serveur).
+- **Parser de question** basé sur des mots-clés + LLM léger sur conflit
+  détecté, pas un parser complet couvrant toutes les formulations possibles.
+- **Résolution des renvois internes** déterministe uniquement pour les IDs
+  de subcategory du document (format `XX.YY-N`) ; les références
+  informatives (CIS CSC, COBIT 5, ISA 62443, ISO/IEC, NIST SP) ne sont pas
+  indexées et ne peuvent donc pas être citées ni résolues.
+- **Rate limit Groq (free tier)** : le nombre d'appels LLM par question est
+  plafonné (max 2 en usage normal, +1 si la résolution de renvois se
+  déclenche) pour rester dans les limites gratuites — au-delà de ce budget,
+  une question sans réponse claire dans le document renvoie directement
+  "pas trouvé" plutôt que d'insister avec plus d'appels.
