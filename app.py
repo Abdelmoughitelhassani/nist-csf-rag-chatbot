@@ -30,6 +30,7 @@ logging.getLogger("streamlit.watcher.local_sources_watcher").setLevel(logging.ER
 
 import chromadb
 import fitz
+import pandas as pd
 import streamlit as st
 from chromadb.utils import embedding_functions
 from dotenv import load_dotenv
@@ -44,6 +45,7 @@ from rag.retrieval import HybridRetriever
 load_dotenv()  # pour un run local (streamlit run app.py) avec un fichier .env
 
 PDF_PATH = "data/nist_csf.pdf"
+MANY_SPANS_THRESHOLD = 3  # au-dela, les spans d'une question "list" sont repliees dans un expander
 
 
 def _load_secret(key: str) -> str | None:
@@ -142,12 +144,29 @@ if question:
         st.error("This question could not be answered from the document.")
     else:
         st.subheader("Réponse")
-        st.write(answer.value)
+        if isinstance(answer.value, dict):
+            # cas type "list" sur des subcategories : value = {ID: description}
+            # (cf. LIST_TYPE_INSTRUCTION dans rag/generation.py) -- tableau
+            # plus lisible que le JSON brut que st.write() afficherait sinon.
+            df = pd.DataFrame(
+                [{"ID": k, "Description": v} for k, v in answer.value.items()]
+            )
+            st.dataframe(df, width="stretch", hide_index=True)
+        else:
+            st.write(answer.value)
 
         st.subheader("Source(s) / span de preuve")
-        for span in answer.evidence:
-            st.markdown(f"**Page {span.page}**")
-            st.text(span.text)
+
+        def _show_spans():
+            for span in answer.evidence:
+                st.markdown(f"**Page {span.page}**")
+                st.text(span.text)
+
+        if result["question_type"] == "list" and len(answer.evidence) > MANY_SPANS_THRESHOLD:
+            with st.expander("Voir les sources", expanded=False):
+                _show_spans()
+        else:
+            _show_spans()
 
         st.subheader("Confiance")
         st.write(f"{answer.confidence:.2f}")
