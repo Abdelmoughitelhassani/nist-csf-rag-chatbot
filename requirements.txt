@@ -1,0 +1,23 @@
+streamlit
+chromadb
+sentence-transformers
+langchain
+langchain-community
+langchain-huggingface
+langchain-groq
+langchain-text-splitters
+groq
+pymupdf
+pydantic
+python-dotenv
+tiktoken
+spacy
+scikit-learn
+# modele spaCy installe directement via pip (wheel officiel) -- necessaire
+# car Streamlit Cloud n'execute pas de commande post-install personnalisee
+# (l'alternative "python -m spacy download en_core_web_sm" ne marche que
+# pour un run local)
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+pandas
+ipykernel
+jupyter
